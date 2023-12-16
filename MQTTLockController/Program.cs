@@ -1,5 +1,5 @@
 ﻿using System;
-using System.Text;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using MQTTnet;
@@ -9,28 +9,25 @@ namespace MQTTLockController
 {
     class Program
     {
-        // this will give us the current status of the lock , fals=unlocked , true=locked 
         private static bool isLocked = true;
-
-        //this is  the current status of the temp pass, whether its activated or not . 
         private static bool isTemporaryPasswordActive = false;
+        private static string temporaryPassword = "";
+        private static string permanentPassword = "1234"; 
+        private static bool isTemporaryPasswordUsed = false;
 
         static async Task Main(string[] args)
         {
             Console.WriteLine("===This is the Controller Client====.");
 
-            // Initialize an MQTT client instance
             var factory = new MqttFactory();
             var mqttClient = factory.CreateMqttClient();
 
-            // Define Broker Connection Options
             var options = new MqttClientOptionsBuilder()
-                .WithTcpServer("127.0.0.1", 1883)
+                .WithTcpServer("127.0.0.1", 1883) 
                 .Build();
 
             try
             {
-                // Connect to the Broker
                 await mqttClient.ConnectAsync(options, CancellationToken.None);
                 Console.WriteLine("Connected to MQTT broker.");
             }
@@ -45,8 +42,9 @@ namespace MQTTLockController
                 Console.WriteLine("1: Lock");
                 Console.WriteLine("2: Unlock");
                 Console.WriteLine("3: Activate Temporary Password");
-                Console.WriteLine("4: Deactivate Temporary Password");
-                Console.WriteLine("5: Exit");
+                Console.WriteLine("4: Show Temporary Password");
+                Console.WriteLine("5: Deactivate Temporary Password");
+                Console.WriteLine("6: Exit");
                 Console.Write("Enter your choice: ");
 
                 var choice = Console.ReadLine();
@@ -55,43 +53,80 @@ namespace MQTTLockController
                 switch (choice)
                 {
                     case "1":
-                        // Lock the door
                         payload = "lock";
                         isLocked = true;
                         break;
                     case "2":
-                        // Unlock the door if the correct password is provided
-                        Console.Write("Enter password: ");
-                        var password = Console.ReadLine();
-                        if (CheckPassword(password))
+                        if (isTemporaryPasswordActive)
                         {
-                            payload = "unlock";
-                            isLocked = false;
-                            isTemporaryPasswordActive = false; // Deactivate temporary password after unlocking 
+                            Console.Write("Enter temporary password: ");
+                            var tempPasswordInput = Console.ReadLine();
+                            if (CheckTempPassword(tempPasswordInput) && !isTemporaryPasswordUsed)
+                            {
+                                payload = "unlock";
+                                isLocked = false;
+                                isTemporaryPasswordActive = false;
+                                isTemporaryPasswordUsed = true;
+                            }
+                            else
+                            {
+                                Console.WriteLine("Incorrect temporary password or password already used. Unable to unlock.");
+                                continue;
+                            }
                         }
                         else
                         {
-                            Console.WriteLine("Incorrect password. Unable to unlock.");
-                            continue;
+                            Console.Write("Enter password: ");
+                            var password = Console.ReadLine();
+                            if (CheckPassword(password))
+                            {
+                                payload = "unlock";
+                                isLocked = false;
+                                isTemporaryPasswordActive = false;
+                            }
+                            else
+                            {
+                                Console.WriteLine("Incorrect password. Unable to unlock.");
+                                continue;
+                            }
                         }
                         break;
                     case "3":
-                        // Activate temporary password using the permanent password
-                        Console.Write("Enter permanent password: ");
-                        var permanentPassword = Console.ReadLine();
-                        if (CheckPassword(permanentPassword))
+                        if (!isTemporaryPasswordActive)
                         {
-                            isTemporaryPasswordActive = true;
-                            Console.WriteLine("Temporary password activated.");
+                            Console.Write("Enter permanent password to activate temporary password: ");
+                            var activatePassword = Console.ReadLine();
+                            if (CheckPassword(activatePassword))
+                            {
+                                temporaryPassword = GenerateTemporaryPassword();
+                                isTemporaryPasswordActive = true;
+                                isTemporaryPasswordUsed = false;
+                                Console.WriteLine($"Temporary password activated: {temporaryPassword}");
+                            }
+                            else
+                            {
+                                Console.WriteLine("Incorrect permanent password. Unable to activate temporary password.");
+                            }
                         }
                         else
                         {
-                            Console.WriteLine("Incorrect permanent password. Unable to activate temporary password.");
+                            Console.WriteLine("Temporary password is already active. Deactivate it first before activating a new one.");
                         }
                         continue;
                     case "4":
-                        // Deactivate temporary password using the permanent password
-                        Console.Write("Enter permanent password: ");
+                        Console.Write("Enter permanent password to display temporary password: ");
+                        var showPassword = Console.ReadLine();
+                        if (CheckPassword(showPassword))
+                        {
+                            ShowTempPassword();
+                        }
+                        else
+                        {
+                            Console.WriteLine("Incorrect permanent password. Unable to show temporary password.");
+                        }
+                        continue;
+                    case "5":
+                        Console.Write("Enter permanent password to deactivate temporary password: ");
                         var deactivatePassword = Console.ReadLine();
                         if (CheckPassword(deactivatePassword))
                         {
@@ -103,7 +138,7 @@ namespace MQTTLockController
                             Console.WriteLine("Incorrect permanent password. Unable to deactivate temporary password.");
                         }
                         continue;
-                    case "5":
+                    case "6":
                         Console.WriteLine("Exiting...");
                         if (mqttClient.IsConnected)
                         {
@@ -125,12 +160,35 @@ namespace MQTTLockController
             }
         }
 
-        // this will checj if user password is correct or not,
-        private static bool CheckPassword(string inputPassword)
+        private static bool CheckPassword(string inputPassword)//this will check if permenant pass is correct 
         {
-            // For simplicity, assume a fixed password (replace with your logic)
-            string correctPassword = "12345";
-            return inputPassword == correctPassword;
+            return inputPassword == permanentPassword;
+        }
+
+        private static bool CheckTempPassword(string inputTempPassword)//this will check if temp pass is correct 
+        {
+            return inputTempPassword == temporaryPassword;
+        }
+
+        private static string GenerateTemporaryPassword()// this function will create a random temp pass each time its called , so temp pass can be only used once .,
+        {
+            const string chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+            var random = new Random();
+            string tempPassword = new string(Enumerable.Repeat(chars, 8)
+                                                .Select(s => s[random.Next(s.Length)]).ToArray());
+            return tempPassword;
+        }
+
+        private static void ShowTempPassword() // this will show the temp pass if its curretly in use, or if the user wants to intilize one. 
+        {
+            if (isTemporaryPasswordActive)
+            {
+                Console.WriteLine($"Temporary Password: {temporaryPassword}");
+            }
+            else
+            {
+                Console.WriteLine("Temporary password is not currently active.");
+            }
         }
     }
 }
