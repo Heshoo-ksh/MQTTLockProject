@@ -49,7 +49,7 @@ namespace MQTTLockClient
                                 statusMessage = $"{command} operation successful";
                                 if (command == "unlock" && password == temporaryPassword)
                                 {
-                                    isTemporaryPasswordActive = false; 
+                                    isTemporaryPasswordActive = false;
                                 }
                                 break;
                             case "activateTemp":
@@ -58,7 +58,7 @@ namespace MQTTLockClient
                                 break;
                             case "deactivateTemp":
                                 isTemporaryPasswordActive = false;
-                                statusMessage = "All Temporary passwords deactivated";
+                                statusMessage = "Temporary password deactivated";
                                 break;
                             default:
                                 statusMessage = "Invalid command";
