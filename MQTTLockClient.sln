@@ -3,9 +3,9 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.6.33723.286
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MQTTLockClient", "MQTTLockClient\MQTTLockClient.csproj", "{892123AD-8CF2-4C2B-9E5C-DA44E001DF17}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "MQTTLockClient", "MQTTLockClient\MQTTLockClient.csproj", "{892123AD-8CF2-4C2B-9E5C-DA44E001DF17}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MQTTLockController", "MQTTLockController\MQTTLockController.csproj", "{E1CFC3C8-5BEF-4DA5-98B3-B3FD9897F941}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "MQTTLockController", "MQTTLockController\MQTTLockController.csproj", "{E1CFC3C8-5BEF-4DA5-98B3-B3FD9897F941}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

@@ -1,4 +1,5 @@
 ﻿using System;
+using System.IO;
 using System.Text;
 using MQTTnet;
 using MQTTnet.Client;
@@ -8,13 +9,16 @@ namespace MQTTLockClient
 {
     class Program
     {
+        private static readonly string lockStateFilePath = "lockstate.txt";
         private static string permanentPassword = "12345"; // Example permanent password
         private static string temporaryPassword = "temp123"; // Example temporary password
         private static bool isTemporaryPasswordActive = false;
 
         static async Task Main(string[] args)
         {
-            Console.WriteLine("===This is the Lock Client====.");
+            Console.WriteLine("Current working directory: " + Directory.GetCurrentDirectory());
+
+            Console.WriteLine("=== This is the Lock Client ===");
 
             var factory = new MqttFactory();
             var mqttClient = factory.CreateMqttClient();
@@ -36,38 +40,32 @@ namespace MQTTLockClient
 
                     if ((password == permanentPassword) || (isTemporaryPasswordActive && password == temporaryPassword))
                     {
-                        if (command == "lock" || command == "unlock")
+                        switch (command)
                         {
-                            Console.WriteLine($"{command}ing the door...");
-                            // Simulate lock/unlock action
-                            // Here you can add logic to change a file's content or another form of state representation
-                            statusMessage = $"{command} operation successful";
-
-                            if (command == "unlock" && password == temporaryPassword)
-                            {
-                                isTemporaryPasswordActive = false; // Disable temp password after use
-                            }
-                        }
-                        else if (command == "activateTemp")
-                        {
-                            isTemporaryPasswordActive = true;
-                            Console.WriteLine("Temporary password activated.");
-                            statusMessage = "Temporary password activated";
-                        }
-                        else if (command == "deactivateTemp")
-                        {
-                            isTemporaryPasswordActive = false;
-                            Console.WriteLine("Temporary password deactivated.");
-                            statusMessage = "Temporary password deactivated";
-                        }
-                        else
-                        {
-                            statusMessage = "Invalid command";
+                            case "lock":
+                            case "unlock":
+                                UpdateLockState(command == "lock" ? "1" : "0");
+                                statusMessage = $"{command} operation successful";
+                                if (command == "unlock" && password == temporaryPassword)
+                                {
+                                    isTemporaryPasswordActive = false; // Disable temp password after use
+                                }
+                                break;
+                            case "activateTemp":
+                                isTemporaryPasswordActive = true;
+                                statusMessage = "Temporary password activated";
+                                break;
+                            case "deactivateTemp":
+                                isTemporaryPasswordActive = false;
+                                statusMessage = "Temporary password deactivated";
+                                break;
+                            default:
+                                statusMessage = "Invalid command";
+                                break;
                         }
                     }
                     else
                     {
-                        Console.WriteLine("Unauthorized attempt!");
                         statusMessage = "Unauthorized attempt";
                     }
                 }
@@ -84,19 +82,18 @@ namespace MQTTLockClient
                 await mqttClient.PublishAsync(statusPayload, CancellationToken.None);
             };
 
-
             try
             {
                 await mqttClient.ConnectAsync(options, CancellationToken.None);
                 Console.WriteLine("Connected to MQTT broker.");
+
+                await mqttClient.SubscribeAsync(new MqttTopicFilterBuilder().WithTopic("lock/commands").Build());
+                Console.WriteLine("Subscribed to 'lock/commands' topic.");
             }
             catch (Exception ex)
             {
                 Console.WriteLine($"Error connecting to MQTT broker: {ex.Message}");
             }
-
-            await mqttClient.SubscribeAsync(new MqttTopicFilterBuilder().WithTopic("lock/commands").Build());
-            Console.WriteLine("Subscribed to 'lock/commands' topic.");
 
             Console.WriteLine("Press any key to exit...");
             Console.ReadLine();
@@ -106,5 +103,19 @@ namespace MQTTLockClient
                 await mqttClient.DisconnectAsync();
             }
         }
+
+        private static void UpdateLockState(string state)
+        {
+            try
+            {
+                File.WriteAllText(lockStateFilePath, state);
+                Console.WriteLine($"Lock state updated to: {(state == "1" ? "Locked" : "Unlocked")}");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Failed to update lock state: {ex.Message}");
+            }
+        }
+
     }
 }
