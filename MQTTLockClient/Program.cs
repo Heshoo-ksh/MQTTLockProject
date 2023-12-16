@@ -11,8 +11,9 @@ namespace MQTTLockClient
     {
         private static readonly string lockStateFilePath = "lockstate.txt";
         private static string permanentPassword = "12345"; // Example permanent password
-        private static string temporaryPassword = "temp123"; // Example temporary password
+        private static string temporaryPassword = ""; // Temporary password will be generated
         private static bool isTemporaryPasswordActive = false;
+        private static bool isTemporaryPasswordUsed = false;
 
         static async Task Main(string[] args)
         {
@@ -38,7 +39,7 @@ namespace MQTTLockClient
                     var command = parts[0];
                     var password = parts[1];
 
-                    if ((password == permanentPassword) || (isTemporaryPasswordActive && password == temporaryPassword))
+                    if ((password == permanentPassword) || (isTemporaryPasswordActive && !isTemporaryPasswordUsed && password == temporaryPassword))
                     {
                         switch (command)
                         {
@@ -48,7 +49,7 @@ namespace MQTTLockClient
                                 statusMessage = $"{command} operation successful";
                                 if (command == "unlock" && password == temporaryPassword)
                                 {
-                                    isTemporaryPasswordActive = false; // Disable temp password after use
+                                    isTemporaryPasswordActive = false; 
                                 }
                                 break;
                             case "activateTemp":
@@ -56,18 +57,50 @@ namespace MQTTLockClient
                                 statusMessage = "Temporary password activated";
                                 break;
                             case "deactivateTemp":
-                                isTemporaryPasswordActive = false;
-                                statusMessage = "Temporary password deactivated";
+                                if (isTemporaryPasswordUsed == true)
+                                {
+                                    statusMessage = "Temporary password is not currently active or does not exists";
+                                    break;
+                                }
+                                else
+                                {
+                                    isTemporaryPasswordActive = false;
+                                    statusMessage = "Temporary password deactivated";
+                                }
                                 break;
                             default:
                                 statusMessage = "Invalid command";
                                 break;
                         }
+                        if (isTemporaryPasswordActive && password == temporaryPassword)
+                        {
+                            isTemporaryPasswordUsed = true;
+                            Console.WriteLine("Temporary password used and now is deactivated!");
+                        }
+                        else if (password == permanentPassword)
+                        {
+                            // Handle permanent password specific commands like activating/deactivating temporary password
+                            if (command == "activateTemp")
+                            {
+                                temporaryPassword = GenerateTemporaryPassword();
+                                isTemporaryPasswordActive = true;
+                                isTemporaryPasswordUsed = false;
+                                statusMessage = $"Temporary password activated: {temporaryPassword}";
+                            }
+                            else if (command == "deactivateTemp")
+                            {
+                                temporaryPassword = "";
+                                isTemporaryPasswordActive = false;
+                                statusMessage = "Temporary password deactivated";
+                            }
+                        }
+
                     }
                     else
                     {
                         statusMessage = "Unauthorized attempt";
                     }
+
                 }
                 else
                 {
@@ -116,6 +149,13 @@ namespace MQTTLockClient
             {
                 Console.WriteLine($"Failed to update lock state: {ex.Message}");
             }
+        }
+        private static string GenerateTemporaryPassword() // Generates a new temporary password
+        {
+            const string chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+            var random = new Random();
+            return new string(Enumerable.Repeat(chars, 8)
+                                      .Select(s => s[random.Next(s.Length)]).ToArray());
         }
 
     }
