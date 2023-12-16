@@ -1,45 +1,92 @@
-﻿using System.Text;
+﻿using System;
+using System.Text;
 using MQTTnet;
 using MQTTnet.Client;
+using System.Threading.Tasks;
 
 namespace MQTTLockClient
 {
     class Program
     {
-        static async System.Threading.Tasks.Task Main(string[] args)
+        private static string permanentPassword = "12345"; // Example permanent password
+        private static string temporaryPassword = "temp123"; // Example temporary password
+        private static bool isTemporaryPasswordActive = false;
+
+        static async Task Main(string[] args)
         {
             Console.WriteLine("===This is the Lock Client====.");
 
-            // Initialize an MQTT client instance
             var factory = new MqttFactory();
             var mqttClient = factory.CreateMqttClient();
 
-            //Define Broker Connection Options: Specify the broker's address and port. For local testing, you can use localhost (127.0.0.1) and the default port 1883 (we will nbeed to change this later).
             var options = new MqttClientOptionsBuilder()
-                .WithTcpServer("127.0.0.1", 1883) // Use localhost and default MQTT port
+                .WithTcpServer("127.0.0.1", 1883)
                 .Build();
 
-            //Message Handler
             mqttClient.ApplicationMessageReceivedAsync += async e =>
             {
-                //    var message = Encoding.UTF8.GetString(e.ApplicationMessage.Payload);
                 var message = Encoding.UTF8.GetString(e.ApplicationMessage.PayloadSegment.ToArray());
-                if (message == "lock")
+                var parts = message.Split(':');
+                string statusMessage;
+
+                if (parts.Length == 2)
                 {
-                    Console.WriteLine("Locking the door...");
-                    // Add further logic for 'lock' command
+                    var command = parts[0];
+                    var password = parts[1];
+
+                    if ((password == permanentPassword) || (isTemporaryPasswordActive && password == temporaryPassword))
+                    {
+                        if (command == "lock" || command == "unlock")
+                        {
+                            Console.WriteLine($"{command}ing the door...");
+                            // Simulate lock/unlock action
+                            // Here you can add logic to change a file's content or another form of state representation
+                            statusMessage = $"{command} operation successful";
+
+                            if (command == "unlock" && password == temporaryPassword)
+                            {
+                                isTemporaryPasswordActive = false; // Disable temp password after use
+                            }
+                        }
+                        else if (command == "activateTemp")
+                        {
+                            isTemporaryPasswordActive = true;
+                            Console.WriteLine("Temporary password activated.");
+                            statusMessage = "Temporary password activated";
+                        }
+                        else if (command == "deactivateTemp")
+                        {
+                            isTemporaryPasswordActive = false;
+                            Console.WriteLine("Temporary password deactivated.");
+                            statusMessage = "Temporary password deactivated";
+                        }
+                        else
+                        {
+                            statusMessage = "Invalid command";
+                        }
+                    }
+                    else
+                    {
+                        Console.WriteLine("Unauthorized attempt!");
+                        statusMessage = "Unauthorized attempt";
+                    }
                 }
-                else if (message == "unlock")
+                else
                 {
-                    Console.WriteLine("Unlocking the door...");
-                    // Add further logic for 'unlock' command
+                    statusMessage = "Invalid command format";
                 }
-                // Add logic to handle lock/unlock commands here
+
+                // Publish status message
+                var statusPayload = new MqttApplicationMessageBuilder()
+                    .WithTopic("lock/status")
+                    .WithPayload(statusMessage)
+                    .Build();
+                await mqttClient.PublishAsync(statusPayload, CancellationToken.None);
             };
+
 
             try
             {
-                //Connect to the Broker
                 await mqttClient.ConnectAsync(options, CancellationToken.None);
                 Console.WriteLine("Connected to MQTT broker.");
             }
@@ -48,7 +95,6 @@ namespace MQTTLockClient
                 Console.WriteLine($"Error connecting to MQTT broker: {ex.Message}");
             }
 
-            //Subscribe to Command Topic (lock/commands)
             await mqttClient.SubscribeAsync(new MqttTopicFilterBuilder().WithTopic("lock/commands").Build());
             Console.WriteLine("Subscribed to 'lock/commands' topic.");
 

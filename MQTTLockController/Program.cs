@@ -9,30 +9,37 @@ namespace MQTTLockController
 {
     class Program
     {
-        // this will give us the current status of the lock , fals=unlocked , true=locked 
-        private static bool isLocked = true;
-
-        //this is  the current status of the temp pass, whether its activated or not . 
-        private static bool isTemporaryPasswordActive = false;
-
         static async Task Main(string[] args)
         {
-            Console.WriteLine("===This is the Controller Client====.");
+            Console.WriteLine("=== MQTT Controller Client ===");
 
-            // Initialize an MQTT client instance
             var factory = new MqttFactory();
             var mqttClient = factory.CreateMqttClient();
+            var tcs = new TaskCompletionSource<bool>(); // TaskCompletionSource to wait for a response
 
-            // Define Broker Connection Options
+
             var options = new MqttClientOptionsBuilder()
                 .WithTcpServer("127.0.0.1", 1883)
                 .Build();
 
+
+            mqttClient.ApplicationMessageReceivedAsync += e =>
+            {
+                var message = Encoding.UTF8.GetString(e.ApplicationMessage.PayloadSegment.ToArray());
+                Console.WriteLine($"Status Update: {message}");
+                tcs.SetResult(true); // Signal that the response has been received
+                return Task.CompletedTask;
+                 
+            };
+
             try
             {
-                // Connect to the Broker
                 await mqttClient.ConnectAsync(options, CancellationToken.None);
                 Console.WriteLine("Connected to MQTT broker.");
+
+                //Subscribe to the status topic AFTER connecting
+                await mqttClient.SubscribeAsync(new MqttTopicFilterBuilder().WithTopic("lock/status").Build());
+                Console.WriteLine("Subscribed to 'lock/status' topic.");
             }
             catch (Exception ex)
             {
@@ -41,7 +48,7 @@ namespace MQTTLockController
 
             while (true)
             {
-                Console.WriteLine("Choose an option:");
+                Console.WriteLine("\nChoose an option:");
                 Console.WriteLine("1: Lock");
                 Console.WriteLine("2: Unlock");
                 Console.WriteLine("3: Activate Temporary Password");
@@ -50,59 +57,31 @@ namespace MQTTLockController
                 Console.Write("Enter your choice: ");
 
                 var choice = Console.ReadLine();
-
                 string payload = "";
+                string password;
+
                 switch (choice)
                 {
                     case "1":
-                        // Lock the door
-                        payload = "lock";
-                        isLocked = true;
+                        Console.Write("Enter password: ");
+                        password = Console.ReadLine();
+                        payload = $"lock:{password}";
                         break;
                     case "2":
-                        // Unlock the door if the correct password is provided
                         Console.Write("Enter password: ");
-                        var password = Console.ReadLine();
-                        if (CheckPassword(password))
-                        {
-                            payload = "unlock";
-                            isLocked = false;
-                            isTemporaryPasswordActive = false; // Deactivate temporary password after unlocking 
-                        }
-                        else
-                        {
-                            Console.WriteLine("Incorrect password. Unable to unlock.");
-                            continue;
-                        }
+                        password = Console.ReadLine();
+                        payload = $"unlock:{password}";
                         break;
                     case "3":
-                        // Activate temporary password using the permanent password
                         Console.Write("Enter permanent password: ");
-                        var permanentPassword = Console.ReadLine();
-                        if (CheckPassword(permanentPassword))
-                        {
-                            isTemporaryPasswordActive = true;
-                            Console.WriteLine("Temporary password activated.");
-                        }
-                        else
-                        {
-                            Console.WriteLine("Incorrect permanent password. Unable to activate temporary password.");
-                        }
-                        continue;
+                        password = Console.ReadLine();
+                        payload = $"activateTemp:{password}";
+                        break;
                     case "4":
-                        // Deactivate temporary password using the permanent password
                         Console.Write("Enter permanent password: ");
-                        var deactivatePassword = Console.ReadLine();
-                        if (CheckPassword(deactivatePassword))
-                        {
-                            isTemporaryPasswordActive = false;
-                            Console.WriteLine("Temporary password deactivated.");
-                        }
-                        else
-                        {
-                            Console.WriteLine("Incorrect permanent password. Unable to deactivate temporary password.");
-                        }
-                        continue;
+                        password = Console.ReadLine();
+                        payload = $"deactivateTemp:{password}";
+                        break;
                     case "5":
                         Console.WriteLine("Exiting...");
                         if (mqttClient.IsConnected)
@@ -121,16 +100,30 @@ namespace MQTTLockController
                     .Build();
 
                 await mqttClient.PublishAsync(message, CancellationToken.None);
-                Console.WriteLine($"Command '{payload}' sent.");
+                Console.WriteLine($"Sent command: '{GetUserFriendlyCommand(payload)}', waiting for the lock status...");
+
+                await tcs.Task; // Wait here for the status update to be received
+                tcs = new TaskCompletionSource<bool>(); // Reset the TaskCompletionSource for the next loop
+
             }
         }
 
-        // this will checj if user password is correct or not,
-        private static bool CheckPassword(string inputPassword)
+        private static string GetUserFriendlyCommand(string commandPayload)
         {
-            // For simplicity, assume a fixed password (replace with your logic)
-            string correctPassword = "12345";
-            return inputPassword == correctPassword;
+            var parts = commandPayload.Split(':');
+            if (parts.Length == 2)
+            {
+                var command = parts[0];
+                return command switch
+                {
+                    "lock" => "Locking the door",
+                    "unlock" => "Unlocking the door",
+                    "activateTemp" => "Activating temporary password",
+                    "deactivateTemp" => "Deactivating temporary password",
+                    _ => "Unknown command"
+                };
+            }
+            return "Invalid command format";
         }
     }
 }
