@@ -58,7 +58,7 @@ namespace MQTTLockClient
                                 break;
                             case "deactivateTemp":
                                 isTemporaryPasswordActive = false;
-                                statusMessage = "Temporary password deactivated";
+                                statusMessage = "All Temporary passwords deactivated";
                                 break;
                             default:
                                 statusMessage = "Invalid command";
