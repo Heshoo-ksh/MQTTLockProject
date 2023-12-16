@@ -73,6 +73,7 @@ namespace MQTTLockClient
                 {
                     statusMessage = "Invalid command format";
                 }
+                Console.WriteLine(statusMessage);
 
                 // Publish status message
                 var statusPayload = new MqttApplicationMessageBuilder()
